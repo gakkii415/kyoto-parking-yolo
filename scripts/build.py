@@ -11,10 +11,10 @@ import onnxruntime as ort
 out=Path('dist');out.mkdir(exist_ok=True)
 shutil.copytree('web',out,dirs_exist_ok=True)
 # GSI z18 aerial photograph, Kyoto Takaragaike south-west parking area.
-z=18; x=229942; y=103783
+z=18; x=229948; y=103778
 url=f'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg'
 raw=urllib.request.urlopen(url,timeout=60).read()
-img=Image.open(BytesIO(raw)).convert('RGB');img.save(out/'sample.jpg',quality=95)
+img=Image.open(BytesIO(raw)).convert('RGB').crop((0,128,128,256));img.save(out/'sample.jpg',quality=95)
 model=YOLO('yolo11n-obb.pt')
 path=model.export(format='onnx',imgsz=640,opset=17,simplify=False,nms=False,dynamic=False)
 shutil.copy(path,out/'model.onnx')
@@ -24,7 +24,7 @@ pred=session.run(None,{session.get_inputs()[0].name:a})[0]
 assert pred.shape==(1,20,8400),pred.shape
 # Keep raw outputs so the exact same browser decoder is tested during CI.
 (out/'raw.bin').write_bytes(pred.astype('<f4').tobytes())
-meta={'name':'宝が池公園・南西側駐車場付近','lat':35.057506,'lon':135.777694,'source':url,'captureDate':None,'retrievedAt':datetime.now(timezone.utc).isoformat(),'model':'YOLO11n-OBB / DOTA','width':256,'height':256,'roi':[[52,95],[114,64],[174,36],[201,88],[115,116],[101,180],[59,230],[18,214],[52,174]],'input':640}
+meta={'name':'京都・岩倉の駐車場','lat':35.062696,'lon':135.785897,'source':url,'captureDate':None,'retrievedAt':datetime.now(timezone.utc).isoformat(),'model':'YOLO11n-OBB / DOTA','width':128,'height':128,'crop':[0,128,128,256],'roi':[[46,88],[91,90],[82,127],[39,122]],'input':640}
 (out/'sample.json').write_text(json.dumps(meta,ensure_ascii=False))
 # Vendor runtime and WASM: same origin, no runtime CDN dependency.
 base='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/'
