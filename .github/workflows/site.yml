@@ -34,15 +34,16 @@ jobs:
           npm install --prefix /tmp/parking-runtime onnxruntime-web@1.20.1
           cp /tmp/parking-runtime/node_modules/onnxruntime-web/dist/ort.min.js _site/vendor/
           cp /tmp/parking-runtime/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.{mjs,wasm} _site/vendor/
-          cp /tmp/parking-runtime/node_modules/onnxruntime-web/LICENSE _site/vendor/ONNX-RUNTIME-LICENSE.txt
           for file in index.html app.js styles.css yolo-worker.js geometry.js; do
-            [ ! -f "$file" ] || cp "$file" _site/
+            cp "$file" _site/
           done
           touch _site/.nojekyll
       - name: Browser integration and geometry tests
         if: hashFiles('tests/smoke.py') != ''
         run: |
           node tests/geometry.test.cjs
+          node --check app.js
+          node --check yolo-worker.js
           pip install playwright==1.55.0
           python -m playwright install --with-deps chromium
           python tests/smoke.py
