@@ -1,0 +1,73 @@
+name: Build, verify and publish
+on:
+  push:
+    branches: [main, build/yolo-app]
+    paths: ['tools/**', '.github/workflows/site.yml', 'index.html', '*.js', '*.css', 'tests/**', 'README.md']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: parking-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/cache@v4
+        with:
+          path: .asset-cache
+          key: kyoto-yolo11n-obb-assets-v1
+      - name: Install CPU inference and export tools
+        run: |
+          pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
+          pip install ultralytics==8.3.203 onnx==1.17.0 onnxruntime==1.20.1
+      - name: Prepare real model and aerial photographs
+        run: python tools/prepare.py
+      - name: Bundle browser runtime and application
+        run: |
+          mkdir -p _site/vendor
+          npm install --prefix /tmp/parking-runtime onnxruntime-web@1.20.1
+          cp /tmp/parking-runtime/node_modules/onnxruntime-web/dist/ort.min.js _site/vendor/
+          cp /tmp/parking-runtime/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.{mjs,wasm} _site/vendor/
+          cp /tmp/parking-runtime/node_modules/onnxruntime-web/LICENSE _site/vendor/ONNX-RUNTIME-LICENSE.txt
+          for file in index.html app.js styles.css yolo-worker.js geometry.js; do
+            [ ! -f "$file" ] || cp "$file" _site/
+          done
+          touch _site/.nojekyll
+      - name: Browser integration and geometry tests
+        if: hashFiles('tests/smoke.py') != ''
+        run: |
+          node tests/geometry.test.cjs
+          pip install playwright==1.55.0
+          python -m playwright install --with-deps chromium
+          python tests/smoke.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prepared-site-and-verification
+          path: |
+            _site
+            test-results
+          retention-days: 7
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main'
+        with:
+          path: _site
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
