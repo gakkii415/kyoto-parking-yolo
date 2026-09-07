@@ -13,7 +13,7 @@ repository-creator経由で作成。スマホ向けのYOLO実験アプリ。
 
 `.github/workflows/publish.yml` がCPU版PyTorchとUltralyticsを使用し、公式重みをONNXへ変換。GSI実画像を取得し、ONNX推論とブラウザ共通のデコーダーで実データ検証後にGitHub Pagesへ公開。モデル・WASM・JSは同じPagesから配信。画像アップロードはサーバー送信されません。
 
-ビルド: `python scripts/build.py` → `node scripts/verify.mjs`。アプリ本体はweb/。ONNX入力 [1,3,640,640]、RGB/255、114のレターボックス。出力 [1,20,8400]。DOTA class 4/5、probabilistic IoU 0.5でNMS。公開verification.jsonはサンプル推論の機械検証結果であり目視正解ラベルではありません。
+ビルド: `python scripts/build.py` → `node scripts/verify.mjs`。アプリ本体はweb/。ONNX入力 [1,3,640,640]、RGB/255、114のレターボックス。出力 [1,20,8400]。DOTA class 9/10、probabilistic IoU 0.5でNMS。公開verification.jsonはサンプル推論の機械検証結果であり目視正解ラベルではありません。
 
 小さな車や影・樹木の遮蔽には誤検出/見逃しがあります。精度未評価。範囲の中心点判定、同一地点・同一範囲・同一閾値で比較してください。履歴はブラウザのlocalStorage最大100件。
 

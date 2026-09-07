@@ -16,6 +16,8 @@ url=f'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg'
 raw=urllib.request.urlopen(url,timeout=60).read()
 img=Image.open(BytesIO(raw)).convert('RGB').crop((0,128,128,256));img.save(out/'sample.jpg',quality=95)
 model=YOLO('yolo11n-obb.pt')
+assert model.names[9]=='large vehicle' and model.names[10]=='small vehicle',model.names
+shutil.copy('LICENSE',out/'LICENSE')
 path=model.export(format='onnx',imgsz=640,opset=17,simplify=False,nms=False,dynamic=False)
 shutil.copy(path,out/'model.onnx')
 session=ort.InferenceSession(str(out/'model.onnx'),providers=['CPUExecutionProvider'])
