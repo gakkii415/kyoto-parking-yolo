@@ -57,3 +57,6 @@
 - Deferred or rejected areas / reasons:
 - Sources / freshness / maintenance:
 - Durable content decisions:
+
+### Kyoto content decisions
+実在する京都・岩倉の駐車場航空写真を初期素材とする。GSIの撮影日は不明。取得日時と区別する。画像種別・車両数の推定・静止画では駐車状態を判断しない点を明記。衛星画像のアップロードは可能だが継続的な衛星観測は未提供。

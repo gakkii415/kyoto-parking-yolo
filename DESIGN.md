@@ -361,3 +361,6 @@ Yesの場合、装飾を追加する前に、構成、情報階層、コンテ�
 - Typography / color / spacing / shape direction:
 - Motion / responsive direction:
 - Durable design decisions:
+
+### Kyoto parking direction
+スマホでYOLOを試す初心者向け。地理院地図 https://maps.gsi.go.jp/ の画像主役・操作を縁に寄せる構造を参照。ブラウザ参照/画面QAは環境のSites指示により未実施。画像中心と履歴一覧中心を比較し、前者を採用。PCは画像＋細い操作欄、スマホは画像・台数・検出ボタンを先行。濃紺背景、白い文字、検出だけ黄緑、範囲は水色。角丸は6px、本文16px、数値は等幅。マーケティング用ヒーローと装飾カードは使わない。
