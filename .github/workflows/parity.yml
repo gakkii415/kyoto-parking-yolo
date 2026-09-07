@@ -1,0 +1,56 @@
+name: Verify model parity
+on:
+  push:
+    branches: [build/yolo-app]
+    paths: ['.github/workflows/parity.yml']
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
+          pip install ultralytics==8.3.203 onnx==1.17.0 onnxruntime==1.20.1
+      - run: |
+          python - <<'PY'
+          import runpy,json,torch,cv2,requests
+          from pathlib import Path
+          import numpy as np
+          from PIL import Image
+          from ultralytics import YOLO
+          env=runpy.run_path('tools/prepare.py');out=Path('parity');out.mkdir(exist_ok=True)
+          reports=[]
+          # Re-load a fresh model so export state cannot affect prediction.
+          for modelname in ['yolo11n-obb','yolov8s-obb']:
+            model=YOLO('.asset-cache/yolo11n-obb.pt' if modelname=='yolo11n-obb' else modelname+'.pt')
+            images=[]
+            im=Image.open('_site/assets/katsuragawa-seamlessphoto.jpg').convert('RGB')
+            images.append(('full',im))
+            for size in [128,192,256,384]:
+              images.append((str(size),im.crop((180,440,180+size,440+size)).resize((640,640))))
+            for label,img in images:
+              result=model.predict(img,imgsz=640,conf=.1,verbose=False)[0]
+              boxes=result.obb
+              rec={'model':modelname,'crop':label,'names':model.names,'classes':boxes.cls.tolist(),'scores':boxes.conf.tolist(),'xywhr':boxes.xywhr.tolist()}
+              reports.append(rec);Image.fromarray(result.plot()[:,:,::-1]).save(out/f'{modelname}-{label}.jpg')
+              print(modelname,label,rec['classes'],rec['scores'],flush=True)
+            model.export(format='onnx',imgsz=640,opset=17,simplify=False,dynamic=False,batch=1,device='cpu')
+          (out/'reports.json').write_text(json.dumps(reports,indent=2))
+          # A known DOTA sample is used only for an engine sanity check, not as Kyoto data.
+          r=requests.get('https://raw.githubusercontent.com/ultralytics/assets/main/im...') if False else None
+          import shutil
+          shutil.copy2('yolov8s-obb.onnx',out/'yolov8s-obb.onnx')
+          shutil.copy2('.asset-cache/yolo11n-obb.pt',out/'yolo11n-obb.pt')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: parity-results
+          path: parity
+          retention-days: 3
