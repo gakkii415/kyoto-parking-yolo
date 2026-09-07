@@ -27,6 +27,7 @@ jobs:
       - run: python scripts/build.py
       - run: node scripts/verify.mjs
       - uses: actions/upload-pages-artifact@v3
+        if: always()
         with:
           path: dist
   deploy:

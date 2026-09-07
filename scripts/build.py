@@ -16,14 +16,16 @@ url=f'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg'
 raw=urllib.request.urlopen(url,timeout=60).read()
 img=Image.open(BytesIO(raw)).convert('RGB').crop((0,128,128,256));img.save(out/'sample.jpg',quality=95)
 model=YOLO('yolo11n-obb.pt')
+import base64
+print('SAMPLE_BASE64',base64.b64encode((out/'sample.jpg').read_bytes()).decode())
 print('IMAGE_SIZE',Image.open(BytesIO(raw)).size, img.size)
-for checkpoint in ['yolo11n-obb.pt','yolo11s-obb.pt','yolov8s-obb.pt']:
+for checkpoint in ['yolo11n.pt','yolov8s.pt']:
  probe=YOLO(checkpoint)
  for crop in [False,True]:
   source=img if crop else Image.open(BytesIO(raw)).convert('RGB')
   for size in [320,640,1024]:
    pr=probe.predict(source,imgsz=size,conf=.1,verbose=False)[0]
-   print('PROBE',checkpoint,crop,size,pr.obb.data.tolist())
+   print('PROBE',checkpoint,crop,size,pr.boxes.data.tolist())
 assert model.names[9]=='large vehicle' and model.names[10]=='small vehicle',model.names
 shutil.copy('LICENSE',out/'LICENSE')
 path=model.export(format='onnx',imgsz=640,opset=17,simplify=False,nms=False,dynamic=False)
