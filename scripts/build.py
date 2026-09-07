@@ -24,6 +24,9 @@ session=ort.InferenceSession(str(out/'model.onnx'),providers=['CPUExecutionProvi
 a=np.array(img.resize((640,640)),dtype=np.float32).transpose(2,0,1)[None]/255
 pred=session.run(None,{session.get_inputs()[0].name:a})[0]
 assert pred.shape==(1,20,8400),pred.shape
+print('CLASS_MAX',[(model.names[i],float(pred[0,4+i].max())) for i in range(15)])
+r=model.predict(img,imgsz=640,conf=.05,verbose=False)[0]
+print('REFERENCE',r.obb.data.tolist())
 # Keep raw outputs so the exact same browser decoder is tested during CI.
 (out/'raw.bin').write_bytes(pred.astype('<f4').tobytes())
 meta={'name':'京都・岩倉の駐車場','lat':35.062696,'lon':135.785897,'source':url,'captureDate':None,'retrievedAt':datetime.now(timezone.utc).isoformat(),'model':'YOLO11n-OBB / DOTA','width':128,'height':128,'crop':[0,128,128,256],'roi':[[46,88],[91,90],[82,127],[39,122]],'input':640}

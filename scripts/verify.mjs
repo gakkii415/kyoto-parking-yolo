@@ -4,6 +4,7 @@ import {decode,inside,similarity} from '../web/detect.mjs';
 const buf=fs.readFileSync('dist/raw.bin');const data=new Float32Array(buf.buffer,buf.byteOffset,buf.byteLength/4);
 const boxes=decode(data,8400,5),meta=JSON.parse(fs.readFileSync('dist/sample.json','utf8'));
 const selected=boxes.filter(b=>b.score>=.25&&inside(b.x,b.y,meta.roi));
+console.log('DECODED',JSON.stringify(boxes));
 assert(selected.length>0,'Real aerial parking ROI must yield vehicle detections');
 assert(inside(5,5,[[0,0],[10,0],[10,10],[0,10]]));
 assert(!inside(15,5,[[0,0],[10,0],[10,10],[0,10]]));
