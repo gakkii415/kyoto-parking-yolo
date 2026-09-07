@@ -1,0 +1,60 @@
+name: Evaluate Kyoto inputs
+on:
+  push:
+    branches: [build/yolo-app]
+    paths: ['.github/workflows/input-evaluation.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
+          pip install ultralytics==8.3.203 onnx==1.17.0 onnxruntime==1.20.1
+      - run: |
+          python - <<'PY'
+          import runpy,json,shutil,math
+          from pathlib import Path
+          import numpy as np,cv2
+          from PIL import Image
+          from ultralytics import YOLO
+          import onnxruntime as ort
+          env=runpy.run_path('tools/prepare.py');out=Path('_site/input-evaluation');out.mkdir(exist_ok=True)
+          sites=[{'id':'kamigamo','name':'上賀茂神社周辺','district':'京都市北区','lat':35.0595,'lon':135.7519,'roi':[[0,0],[1,0],[1,1],[0,1]]},{'id':'kinkaku','name':'金閣寺周辺','district':'京都市北区','lat':35.0394,'lon':135.7321,'roi':[[0,0],[1,0],[1,1],[0,1]]},{'id':'nishikyogoku','name':'西京極運動公園周辺','district':'京都市右京区','lat':34.9923,'lon':135.7120,'roi':[[0,0],[1,0],[1,1],[0,1]]}]
+          results=[];images=[]
+          for site in sites:
+            im,rec=env['mosaic'](site);images.append((im,rec))
+            for tile in [192,384]:
+              boxes,maxima=env['infer'](im,tile=tile)
+              results.append({'model':'yolo11n-obb','site':site['id'],'tile':tile,'count25':sum(b['score']>=.25 for b in boxes),'boxes':boxes,'maxima':maxima})
+          images.append((Image.open('_site/assets/katsuragawa-seamlessphoto.jpg').convert('RGB'),{'siteId':'katsuragawa'}))
+          model=YOLO('yolo11n.pt');f=model.export(format='onnx',imgsz=640,opset=17,simplify=False,dynamic=False,batch=1,device='cpu');shutil.copy2(f,out/'yolo11n.onnx')
+          session=ort.InferenceSession(f,providers=['CPUExecutionProvider'])
+          for im,rec in images:
+            for tile in [256,384]:
+              boxes=[];scores=[];candidates=[];maxscore=0
+              for y in env['offsets'](im.height,tile):
+                for x in env['offsets'](im.width,tile):
+                  crop=np.asarray(im)[y:y+tile,x:x+tile];inp=cv2.resize(crop,(640,640)).transpose(2,0,1)[None].astype(np.float32)/255
+                  a=session.run(None,{'images':np.ascontiguousarray(inp)})[0][0];sc=a[4:];cl=sc.argmax(0);best=sc.max(0);maxscore=max(maxscore,float(sc[[2,5,7]].max()))
+                  for i in np.where((best>=.08)&np.isin(cl,[2,5,7]))[0]:
+                    cx,cy,w,h=map(float,a[:4,i]/(640/tile));b={'cx':cx+x,'cy':cy+y,'w':w,'h':h,'angle':0,'score':float(best[i]),'classId':int(cl[i])};candidates.append(b);boxes.append([b['cx']-w/2,b['cy']-h/2,w,h]);scores.append(b['score'])
+              keep=cv2.dnn.NMSBoxes(boxes,scores,.08,.3) if boxes else []
+              detections=[candidates[int(i)] for i in np.array(keep).flatten()]
+              results.append({'model':'yolo11n','site':rec['siteId'],'tile':tile,'count25':sum(b['score']>=.25 for b in detections),'boxes':detections,'maxscore':maxscore})
+          (out/'evaluation.json').write_text(json.dumps(results,indent=2))
+          print([(r['model'],r['site'],r['tile'],r['count25']) for r in results])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kyoto-input-evaluation
+          path: _site
+          retention-days: 3
