@@ -1,4 +1,4 @@
-import {objects,letterbox,labels,bones,mask,track,inArea} from './detect.mjs?v=5';
+import {objects,letterbox,labels,bones,mask,track,inArea} from './detect.mjs?v=6';
 const $=id=>document.getElementById(id),video=$('video'),canvas=$('canvas'),ctx=canvas.getContext('2d');
 const frame=document.createElement('canvas'),fc=frame.getContext('2d'),input=document.createElement('canvas');input.width=input.height=640;
 const ic=input.getContext('2d',{willReadFrequently:true});
@@ -11,11 +11,11 @@ let session=null,starting=false,active=false,busy=false,dirty=true,epoch=0,last=
 const fmt=t=>`${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,'0')}`;
 function position(){const t=Number.isFinite(video.currentTime)?video.currentTime:0,d=video.duration;$('time').textContent=`${fmt(t)} / ${Number.isFinite(d)?fmt(d):'—'}`;$('seek').value=t;}
 function invalidate(resetTracks=true){if(resetTracks){tracks=[];nextId=1;}epoch++;dirty=true;last=null;$('count').textContent='—';canvas.style.visibility='hidden';}
-const colors=['#d4c7ff','#421d24','#ffffff','#bda6da','#91767c'];
+const colors=['#a981ff','#00b2ff','#f5ff63','#cab3f8','#ffffff'];
 function draw(){if(!last)return;ctx.drawImage(frame,0,0);const w=canvas.width,h=canvas.height;
  if($('boxes').checked){
  if(mode==='track'){for(const lost of tracks.filter(t=>!t.visible)){ctx.strokeStyle=colors[(lost.id-1)%colors.length];ctx.globalAlpha=.3;ctx.lineWidth=Math.max(2,w/300);ctx.beginPath();lost.trail.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.stroke();ctx.globalAlpha=1;}}
- if(mode==='area'){ctx.strokeStyle='#421d24';ctx.lineWidth=3;ctx.strokeRect(w*.25,h*.2,w*.5,h*.6);}
+ if(mode==='area'){ctx.strokeStyle='#7a40ed';ctx.lineWidth=3;ctx.strokeRect(w*.25,h*.2,w*.5,h*.6);}
  if(mode==='segment'&&last.proto){const layer=document.createElement('canvas');layer.width=layer.height=160;const lc=layer.getContext('2d'),pixels=lc.createImageData(160,160);
  for(let j=0;j<boxList.length;j++){const values=mask(boxList[j],last.data,last.n,last.proto,last.geometry);const hex=colors[j%colors.length];for(let i=0;i<values.length;i++)if(values[i]){pixels.data[i*4]=parseInt(hex.slice(1,3),16);pixels.data[i*4+1]=parseInt(hex.slice(3,5),16);pixels.data[i*4+2]=parseInt(hex.slice(5,7),16);pixels.data[i*4+3]=140;}}
  lc.putImageData(pixels,0,0);const g=last.geometry;ctx.drawImage(layer,g.padX/4,g.padY/4,g.width/4,g.height/4,0,0,w,h);}
@@ -23,7 +23,7 @@ function draw(){if(!last)return;ctx.drawImage(frame,0,0);const w=canvas.width,h=
  if(mode==='pose'){for(const [a,z] of bones){const p=b.points[a],q=b.points[z];if(p[2]<.4||q[2]<.4)continue;ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();}for(const p of b.points){if(p[2]<.4)continue;ctx.beginPath();ctx.arc(p[0],p[1],Math.max(3,w/180),0,Math.PI*2);ctx.fill();}}
  else if(mode==='track'){ctx.beginPath();b.trail.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.stroke();ctx.beginPath();ctx.arc(b.x+b.w/2,b.y+b.h/2,5,0,Math.PI*2);ctx.fill();}
  else if(mode!=='segment'){ctx.globalAlpha=mode==='area'&&!inArea(b,w,h)?.3:1;ctx.strokeRect(b.x,b.y,b.w,b.h);ctx.globalAlpha=1;}
- const label=`${mode==='track'?'#'+b.id+' ':''}${labels[b.cls]} ${Math.round(b.score*100)}%`;ctx.font=`bold ${Math.max(14,w/48)}px sans-serif`;const tw=ctx.measureText(label).width+10,x=Math.max(0,Math.min(w-tw,b.x)),y=Math.max(0,b.y-24);ctx.fillStyle=color;ctx.fillRect(x,y,tw,24);ctx.fillStyle=['#421d24','#91767c'].includes(color)?'#ffffff':'#292827';ctx.fillText(label,x+5,y+18);
+ const label=`${mode==='track'?'#'+b.id+' ':''}${labels[b.cls]} ${Math.round(b.score*100)}%`;ctx.font=`bold ${Math.max(14,w/48)}px sans-serif`;const tw=ctx.measureText(label).width+10,x=Math.max(0,Math.min(w-tw,b.x)),y=Math.max(0,b.y-24);ctx.fillStyle=color;ctx.fillRect(x,y,tw,24);ctx.fillStyle='#19171c';ctx.fillText(label,x+5,y+18);
  }}
  canvas.style.visibility='visible';const counted=mode==='area'?boxList.filter(b=>inArea(b,w,h)):boxList;$('count').textContent=counted.length;const totals={};for(const b of counted)totals[labels[b.cls]]=(totals[labels[b.cls]]||0)+1;$('breakdown').textContent=Object.entries(totals).map(([label,n])=>`${label} ${n}`).join(' ／ ')||'この場面では対象を検出していません。';
 }
