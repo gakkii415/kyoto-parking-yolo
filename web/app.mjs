@@ -3,17 +3,18 @@ const $=id=>document.getElementById(id),video=$('video'),canvas=$('canvas'),ctx=
 const frame=document.createElement('canvas'),fc=frame.getContext('2d'),input=document.createElement('canvas');input.width=input.height=640;
 const ic=input.getContext('2d',{willReadFrequently:true});
 const scenes={store:['店舗の固定カメラ','camera.mp4','poster.jpg','store-aisle-detection.mp4'],road:['道路の車','road.mp4','road.jpg','car-detection.mp4'],street:['人・自転車・車','street.mp4','street.jpg','person-bicycle-car-detection.mp4']};
-const hints={detect:'人・車・自転車・食器など、対象に名前と枠を表示します。',segment:'対象の形に沿って色を塗ります。輪郭専用のYOLOを使います。',pose:'人の肩・肘・膝などを点と線で表示します。骨格は人専用です。',track:'同じ対象を仮番号で追い、移動の軌跡を表示します。隠れると番号が変わる場合があります。',area:'中央の水色エリアに、対象の中心が入ると強調します。数字はエリア内の対象数です。'};
-let mode='detect',sessionKind='',tracks=[],nextId=1;
+const hints={detect:'人・車・自転車・食器など、対象に名前と枠を表示します。',segment:'対象の形に沿って色を塗ります。輪郭専用のYOLOを使います。',pose:'人の肩・肘・膝などを点と線で表示します。骨格は人専用です。',track:'同じ対象を仮番号で追い、移動の軌跡を表示します。隠れると番号が変わる場合があります。',area:'中央の枠のエリアに、対象の中心が入ると強調します。数字はエリア内の対象数です。'};
+let mode='detect',sessionKind='',tracks=[],nextId=1,sceneFresh=true;
+const sceneInfo=fetch('sample.json').then(r=>r.json()).catch(()=>null);
 const kind=()=>mode==='segment'?'segment':mode==='pose'?'pose':'detect';
 let session=null,starting=false,active=false,busy=false,dirty=true,epoch=0,last=null,lastTime=-1,boxList=[];
 const fmt=t=>`${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,'0')}`;
 function position(){const t=Number.isFinite(video.currentTime)?video.currentTime:0,d=video.duration;$('time').textContent=`${fmt(t)} / ${Number.isFinite(d)?fmt(d):'—'}`;$('seek').value=t;}
 function invalidate(){tracks=[];nextId=1;epoch++;dirty=true;last=null;$('count').textContent='—';canvas.style.visibility='hidden';}
-const colors=['#cbf779','#6bd9f5','#ffaf7b','#e9a6ff','#ffe078'];
+const colors=['#d4c7ff','#421d24','#ffffff','#bda6da','#91767c'];
 function draw(){if(!last)return;ctx.drawImage(frame,0,0);const w=canvas.width,h=canvas.height;
  if($('boxes').checked){
- if(mode==='area'){ctx.strokeStyle='#6bd9f5';ctx.lineWidth=3;ctx.strokeRect(w*.25,h*.2,w*.5,h*.6);}
+ if(mode==='area'){ctx.strokeStyle='#421d24';ctx.lineWidth=3;ctx.strokeRect(w*.25,h*.2,w*.5,h*.6);}
  if(mode==='segment'&&last.proto){const layer=document.createElement('canvas');layer.width=layer.height=160;const lc=layer.getContext('2d'),pixels=lc.createImageData(160,160);
  for(let j=0;j<boxList.length;j++){const values=mask(boxList[j],last.data,last.n,last.proto,last.geometry);const hex=colors[j%colors.length];for(let i=0;i<values.length;i++)if(values[i]){pixels.data[i*4]=parseInt(hex.slice(1,3),16);pixels.data[i*4+1]=parseInt(hex.slice(3,5),16);pixels.data[i*4+2]=parseInt(hex.slice(5,7),16);pixels.data[i*4+3]=140;}}
  lc.putImageData(pixels,0,0);const g=last.geometry;ctx.drawImage(layer,g.padX/4,g.padY/4,g.width/4,g.height/4,0,0,w,h);}
@@ -21,7 +22,7 @@ function draw(){if(!last)return;ctx.drawImage(frame,0,0);const w=canvas.width,h=
  if(mode==='pose'){for(const [a,z] of bones){const p=b.points[a],q=b.points[z];if(p[2]<.4||q[2]<.4)continue;ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();}for(const p of b.points){if(p[2]<.4)continue;ctx.beginPath();ctx.arc(p[0],p[1],Math.max(3,w/180),0,Math.PI*2);ctx.fill();}}
  else if(mode==='track'){ctx.beginPath();b.trail.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.stroke();ctx.beginPath();ctx.arc(b.x+b.w/2,b.y+b.h/2,5,0,Math.PI*2);ctx.fill();}
  else if(mode!=='segment'){ctx.globalAlpha=mode==='area'&&!inArea(b,w,h)?.3:1;ctx.strokeRect(b.x,b.y,b.w,b.h);ctx.globalAlpha=1;}
- const label=`${mode==='track'?'#'+b.id+' ':''}${labels[b.cls]} ${Math.round(b.score*100)}%`;ctx.font=`bold ${Math.max(14,w/48)}px sans-serif`;const tw=ctx.measureText(label).width+10,x=Math.max(0,Math.min(w-tw,b.x)),y=Math.max(0,b.y-24);ctx.fillStyle=color;ctx.fillRect(x,y,tw,24);ctx.fillStyle='#101619';ctx.fillText(label,x+5,y+18);
+ const label=`${mode==='track'?'#'+b.id+' ':''}${labels[b.cls]} ${Math.round(b.score*100)}%`;ctx.font=`bold ${Math.max(14,w/48)}px sans-serif`;const tw=ctx.measureText(label).width+10,x=Math.max(0,Math.min(w-tw,b.x)),y=Math.max(0,b.y-24);ctx.fillStyle=color;ctx.fillRect(x,y,tw,24);ctx.fillStyle=['#421d24','#91767c'].includes(color)?'#ffffff':'#292827';ctx.fillText(label,x+5,y+18);
  }}
  canvas.style.visibility='visible';const counted=mode==='area'?boxList.filter(b=>inArea(b,w,h)):boxList;$('count').textContent=counted.length;const totals={};for(const b of counted)totals[labels[b.cls]]=(totals[labels[b.cls]]||0)+1;$('breakdown').textContent=Object.entries(totals).map(([label,n])=>`${label} ${n}`).join(' ／ ')||'この場面では対象を検出していません。';
 }
@@ -52,6 +53,7 @@ async function start(){if(starting)return;starting=true;lock(true);active=false;
  // Call play directly in the tap handler. Do not wait for preload/loadeddata.
  video.muted=true;video.playsInline=true;if(video.error)video.load();
  await timeout(video.play(),20000,'video timeout');
+ if(sceneFresh){const meta=await timeout(sceneInfo,3000,'scene info').catch(()=>null);const info=meta?.checks?.find(c=>c.scene===$('scene').value);if(info)video.currentTime=info.time;sceneFresh=false;}
  $('message').textContent='YOLOを読み込み中… 初回は少し時間がかかります。';$('state').textContent='YOLOを準備中';
  while(busy)await new Promise(resolve=>setTimeout(resolve,25));
  if(session&&sessionKind!==kind()){await session.release();session=null;}
@@ -66,9 +68,9 @@ async function start(){if(starting)return;starting=true;lock(true);active=false;
  finally{starting=false;lock(false);}
 }
 function lock(value){$('scene').disabled=value;$('filter').disabled=value||mode==='pose';for(const button of document.querySelectorAll('[data-mode]'))button.disabled=value;}
-function prepare(){active=false;video.pause();invalidate();$('cover').hidden=false;$('start').disabled=false;$('start').textContent='このモードで開始';$('message').textContent='ボタンを押すと解析を開始します。';$('state').textContent='開始できます';$('countLabel').textContent=mode==='area'?'エリア内の対象':'検出した対象';$('countUnit').textContent=mode==='pose'?'人':'件';$('modeHint').textContent=hints[mode];$('breakdown').textContent='開始すると種類ごとの数を表示します。';lock(false);}
-for(const button of document.querySelectorAll('[data-mode]'))button.onclick=()=>{if(starting)return;mode=button.dataset.mode;for(const other of document.querySelectorAll('[data-mode]'))other.setAttribute('aria-pressed',String(other===button));prepare();};
-$('scene').onchange=()=>{prepare();const scene=scenes[$('scene').value];video.src=scene[1];video.poster=scene[2];video.load();$('sceneTitle').textContent=scene[0];$('sourceLink').href='https://github.com/intel-iot-devkit/sample-videos/blob/master/'+scene[3];$('sourceLink').textContent='Intel / '+scene[3];};
+function prepare(){active=false;for(const id of ['play','restart','seek'])$(id).disabled=true;video.pause();invalidate();$('cover').hidden=false;$('start').disabled=false;$('start').textContent='このモードで開始';$('message').textContent='ボタンを押すと解析を開始します。';$('state').textContent='開始できます';$('countLabel').textContent=mode==='area'?'エリア内の対象':'検出した対象';$('countUnit').textContent=mode==='pose'?'人':'件';$('modeHint').textContent=hints[mode];$('breakdown').textContent='開始すると種類ごとの数を表示します。';lock(false);}
+for(const button of document.querySelectorAll('[data-mode]'))button.onclick=()=>{if(starting)return;mode=button.dataset.mode;if(mode==='pose')$('filter').value='person';for(const other of document.querySelectorAll('[data-mode]'))other.setAttribute('aria-pressed',String(other===button));prepare();};
+$('scene').onchange=()=>{sceneFresh=true;prepare();const scene=scenes[$('scene').value];video.src=scene[1];video.poster=scene[2];video.load();$('sceneTitle').textContent=scene[0];$('sourceLink').href='https://github.com/intel-iot-devkit/sample-videos/blob/master/'+scene[3];$('sourceLink').textContent='Intel / '+scene[3];};
 $('filter').onchange=()=>{if(busy)invalidate();else{tracks=[];classify();}};
 $('start').onclick=start;
 $('play').onclick=async()=>{if(video.paused){try{await video.play();dirty=true;}catch{$('status').textContent='再生できませんでした。もう一度再生を押してください。';}}else{video.pause();invalidate();}ui();};
