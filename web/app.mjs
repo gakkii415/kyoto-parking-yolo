@@ -1,24 +1,50 @@
-import {decode,inside,corners} from './detect.mjs';
-const $=id=>document.getElementById(id),canvas=$('canvas'),ctx=canvas.getContext('2d');
-let img=null,meta=null,boxes=null,roi=[],draft=[],editing=false,busy=false,session=null,sample=true,sourceName='',records=[];
-try{const v=JSON.parse(localStorage.getItem('kyoto-parking-v1')||'[]');if(Array.isArray(v))records=v.filter(r=>r&&typeof r.name==='string'&&Number.isFinite(r.count)).slice(0,100);}catch{}
-function status(s){$('status').textContent=s;}
-function lock(v){busy=v;for(const id of ['run','sample','file','roi','full','save','confidence','done','cancel','undo','captureDate','siteName'])$(id).disabled=v||(!img&&['run','roi','full'].includes(id))||(id==='save'&&(boxes===null||editing));}
-function selected(){return (boxes||[]).filter(b=>b.score>=+$('confidence').value/100&&b.x>=0&&b.y>=0&&b.x<=canvas.width&&b.y<=canvas.height&&(roi.length<3||inside(b.x,b.y,roi)));}
-function draw(){if(!img)return;ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);const poly=editing?draft:roi;if(poly.length){ctx.beginPath();poly.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));if(!editing)ctx.closePath();ctx.strokeStyle='#7cdbea';ctx.fillStyle='#7cdbea12';ctx.lineWidth=2*canvas.width/400;ctx.stroke();if(!editing)ctx.fill();for(const [x,y]of poly){ctx.beginPath();ctx.arc(x,y,3*canvas.width/400,0,Math.PI*2);ctx.fillStyle='#7cdbea';ctx.fill();}}
-const visible=selected();if($('boxes').checked&&boxes){visible.forEach(b=>{const p=corners(b);ctx.beginPath();p.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();ctx.strokeStyle='#172012';ctx.lineWidth=3*canvas.width/400;ctx.stroke();ctx.strokeStyle='#d6fb6a';ctx.lineWidth=1.5*canvas.width/400;ctx.stroke();});}
-$('count').textContent=boxes===null?'—':visible.length;$('resultNote').textContent=boxes===null?'「YOLOで数える」で実行':editing?'範囲を確定してください':visible.length===0?'未検出。車がないとは限りません':`推定値 · 信頼度 ${$('confidence').value}%以上`;$('save').disabled=busy||boxes===null||editing;}
-async function loadImage(src){const next=new Image();next.src=src;await next.decode();return next;}
-function setImage(next){img=next;const factor=Math.min(1,2048/Math.max(img.width,img.height));canvas.width=Math.round(img.width*factor);canvas.height=Math.round(img.height*factor);boxes=null;editing=false;draft=[];$('edittools').hidden=true;canvas.classList.remove('editing');$('zoom').value=1;canvas.style.width='100%';draw();}
-async function loadSample(){if(busy)return;lock(true);$('loading').hidden=false;try{const r=await fetch('sample.json');if(!r.ok)throw Error('画像情報を取得できません');meta=await r.json();const next=await loadImage('sample.png');sample=true;sourceName=meta.name;roi=meta.roi;setImage(next);$('place').textContent=sourceName;$('siteName').value=sourceName;$('captureDate').value='';$('imageLabel').textContent='航空写真 · 撮影日不明';$('sourceInfo').textContent=`サンプル取得日時：${new Date(meta.retrievedAt).toLocaleString('ja-JP')}。撮影日時ではありません。`;status('準備できました。ボタンでYOLOを実行できます。');$('viewHint').textContent='写真を拡大して検出枠を確認できます。';}catch(e){status('画像を読み込めませんでした。「京都の写真に戻す」で再試行してください。');}finally{$('loading').hidden=true;lock(false);}}
-$('run').onclick=async()=>{if(!img||busy||editing)return;lock(true);const start=performance.now();try{status(session?'YOLOが車両を探しています…':'初回：YOLOモデルを読み込み中…');await new Promise(r=>setTimeout(r,40));if(!globalThis.ort)throw Error('解析エンジンの読み込みに失敗しました。ページを再読み込みしてください。');if(!session){ort.env.wasm.wasmPaths=new URL('./',location.href).href;ort.env.wasm.numThreads=1;ort.env.wasm.proxy=false;session=await ort.InferenceSession.create('model.onnx',{executionProviders:['wasm'],graphOptimizationLevel:'all'});}status('YOLOが車両を探しています…');const size=640,scale=Math.min(size/canvas.width,size/canvas.height),w=Math.round(canvas.width*scale),h=Math.round(canvas.height*scale),px=Math.floor((size-w)/2),py=Math.floor((size-h)/2);const tmp=document.createElement('canvas');tmp.width=tmp.height=size;const tc=tmp.getContext('2d',{willReadFrequently:true});tc.fillStyle='rgb(114,114,114)';tc.fillRect(0,0,size,size);tc.drawImage(img,px,py,w,h);const rgba=tc.getImageData(0,0,size,size).data,arr=new Float32Array(3*size*size);for(let i=0;i<size*size;i++){arr[i]=rgba[i*4]/255;arr[size*size+i]=rgba[i*4+1]/255;arr[2*size*size+i]=rgba[i*4+2]/255;}const input=new ort.Tensor('float32',arr,[1,3,size,size]);const outputs=await session.run({[session.inputNames[0]]:input});const out=outputs[session.outputNames[0]];if(out.dims[1]!==15)throw Error('モデルの出力形式が一致しません');boxes=decode(out.data,out.dims[2],scale,px,py);input.dispose();Object.values(outputs).forEach(t=>t.dispose());draw();status(`検出完了 · ${((performance.now()-start)/1000).toFixed(1)}秒。写真と枠を見比べてください。`);}catch(e){status(`解析できませんでした：${e.message} 再実行できます。`);}finally{lock(false);}};
-$('confidence').oninput=()=>{$('confidenceValue').value=$('confidence').value+'%';draw();};$('boxes').onchange=draw;$('zoom').oninput=()=>{canvas.style.width=(+$('zoom').value*100)+'%';};
-$('roi').onclick=()=>{editing=true;draft=[];$('edittools').hidden=false;canvas.classList.add('editing');$('run').disabled=true;$('save').disabled=true;status('駐車場の周囲を順番に3点以上タップし、範囲を確定してください。');draw();};
-canvas.onpointerdown=e=>{if(!editing||busy)return;const r=canvas.getBoundingClientRect();draft.push([(e.clientX-r.left)*canvas.width/r.width,(e.clientY-r.top)*canvas.height/r.height]);draw();};
-function endEdit(){editing=false;draft=[];$('edittools').hidden=true;canvas.classList.remove('editing');lock(false);draw();}
-$('done').onclick=()=>{if(draft.length<3){status('範囲を作るには3点以上必要です。');return;}roi=draft.map(p=>[...p]);endEdit();status('指定した範囲の内側を集計します。');};$('cancel').onclick=()=>{endEdit();status('範囲の変更を取り消しました。');};$('undo').onclick=()=>{draft.pop();draw();};$('full').onclick=()=>{roi=[];endEdit();status('画像全体の車両を集計します。道路上の車も含まれます。');};$('sample').onclick=loadSample;
-$('file').onchange=async e=>{const f=e.target.files[0];if(!f)return;if(f.size>30*1024*1024){status('画像は30MB以下を選んでください。');e.target.value='';return;}lock(true);const url=URL.createObjectURL(f);try{const next=await loadImage(url);sample=false;sourceName=f.name;roi=[];setImage(next);$('place').textContent=f.name;$('siteName').value='';$('captureDate').value='';$('imageLabel').textContent='取り込んだ画像 · 撮影日未設定';status('画像を読み込みました。駐車場の範囲を指定してYOLOを実行してください。');}catch{status('画像を開けませんでした。JPEG / PNG / WebPを選んでください。');}finally{URL.revokeObjectURL(url);e.target.value='';lock(false);}};
-$('captureDate').onchange=()=>{$('imageLabel').textContent=(sample?'航空写真':'取り込んだ画像')+' · '+($('captureDate').value||'撮影日不明');};
-function renderHistory(){const root=$('history');root.replaceChildren();$('csv').disabled=!records.length;if(!records.length){root.textContent='まだ記録がありません。検出後に結果を保存できます。';return;}const t=document.createElement('table'),head=t.createTHead().insertRow();for(const label of ['地点 / 撮影日','台数','判定条件','保存日時','']){const th=document.createElement('th');th.textContent=label;head.append(th);}const body=t.createTBody();records.forEach((r,i)=>{const tr=body.insertRow();for(const text of [r.name+' / '+(r.date||'撮影日不明'),`${r.count}台`,`${r.threshold}%・${r.scope}`,new Date(r.saved).toLocaleString('ja-JP')])tr.insertCell().textContent=text;const b=document.createElement('button');b.textContent='削除';b.setAttribute('aria-label',`${r.name}の記録を削除`);b.onclick=()=>{const next=records.filter((_,j)=>j!==i);try{localStorage.setItem('kyoto-parking-v1',JSON.stringify(next));records=next;renderHistory();}catch{status('履歴を変更できませんでした。');}};tr.insertCell().append(b);});root.append(t);}
-$('save').onclick=()=>{if(boxes===null||busy||editing)return;const r={name:$('siteName').value.trim()||sourceName,date:$('captureDate').value,count:selected().length,threshold:+$('confidence').value,scope:roi.length?'指定範囲':'画像全体',roi:roi.map(p=>[...p]),width:canvas.width,height:canvas.height,model:'YOLO11s-VisDrone',saved:new Date().toISOString()};const next=[r,...records].slice(0,100);try{localStorage.setItem('kyoto-parking-v1',JSON.stringify(next));records=next;renderHistory();status('この端末に保存しました。履歴は最大100件です。');}catch{status('保存できませんでした。ブラウザの保存設定を確認してください。');}};
-$('csv').onclick=()=>{const q=v=>'"'+String(v??'').replace(/^[=+@-]/,"'$&").replaceAll('"','""')+'"';const rows=[['地点','撮影日','台数','閾値%','範囲','範囲座標','画像幅','画像高さ','モデル','保存日時'],...records.map(r=>[r.name,r.date,r.count,r.threshold,r.scope,JSON.stringify(r.roi),r.width,r.height,r.model,r.saved])];const url=URL.createObjectURL(new Blob(['\ufeff'+rows.map(r=>r.map(q).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='kyoto-parking.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};renderHistory();loadSample();
+import {decode,letterbox} from './detect.mjs?v=2';
+const $=id=>document.getElementById(id),video=$('video'),canvas=$('canvas'),ctx=canvas.getContext('2d');
+const frame=document.createElement('canvas'),fc=frame.getContext('2d'),input=document.createElement('canvas');input.width=input.height=640;
+const ic=input.getContext('2d',{willReadFrequently:true});
+let session=null,starting=false,active=false,busy=false,dirty=true,epoch=0,last=null,lastTime=-1,boxList=[];
+const fmt=t=>`${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,'0')}`;
+function position(){const t=Number.isFinite(video.currentTime)?video.currentTime:0,d=video.duration;$('time').textContent=`${fmt(t)} / ${Number.isFinite(d)?fmt(d):'—'}`;$('seek').value=t;}
+function invalidate(){epoch++;dirty=true;last=null;$('count').textContent='—';canvas.style.visibility='hidden';}
+function draw(){if(!last)return;ctx.drawImage(frame,0,0);if($('boxes').checked){ctx.strokeStyle='#cbf779';ctx.lineWidth=Math.max(2,canvas.width/350);ctx.font=`bold ${Math.max(14,canvas.width/48)}px sans-serif`;for(const b of boxList){const x=Math.max(0,b.x),y=Math.max(0,b.y),w=Math.min(canvas.width,b.x+b.w)-x,h=Math.min(canvas.height,b.y+b.h)-y;if(w<=0||h<=0)continue;ctx.strokeRect(x,y,w,h);const label=`人物 ${Math.round(b.score*100)}%`,tw=ctx.measureText(label).width+10,ly=Math.max(0,y-24);ctx.fillStyle='#cbf779';ctx.fillRect(x,ly,tw,24);ctx.fillStyle='#101619';ctx.fillText(label,x+5,ly+18);}}
+ canvas.style.visibility='visible';$('count').textContent=boxList.length;
+}
+function classify(){if(!last)return;boxList=decode(last.data,last.n,last.geometry.scale,last.geometry.padX,last.geometry.padY,Number($('confidence').value)/100);draw();}
+function ui(){const paused=video.paused;$('play').textContent=paused?'再生':'一時停止';$('play').setAttribute('aria-label',paused?'再生':'一時停止');if(active)$('state').textContent=paused?'一時停止':'人物を検出中';}
+async function infer(){if(!session||busy||!active||video.readyState<2||video.seeking||document.hidden)return;
+ if(!dirty&&(video.paused||Math.abs(video.currentTime-lastTime)<.08))return;
+ busy=true;dirty=false;const ticket=epoch,t=video.currentTime,begin=performance.now();
+ try{const w=video.videoWidth,h=video.videoHeight;if(frame.width!==w||frame.height!==h){frame.width=canvas.width=w;frame.height=canvas.height=h;}fc.drawImage(video,0,0,w,h);
+ const g=letterbox(w,h);ic.fillStyle='rgb(114,114,114)';ic.fillRect(0,0,640,640);ic.drawImage(frame,0,0,w,h,g.padX,g.padY,g.width,g.height);
+ const rgba=ic.getImageData(0,0,640,640).data,pixels=640*640,a=new Float32Array(3*pixels);for(let p=0;p<pixels;p++){a[p]=rgba[p*4]/255;a[p+pixels]=rgba[p*4+1]/255;a[p+2*pixels]=rgba[p*4+2]/255;}
+ const tensor=new ort.Tensor('float32',a,[1,3,640,640]);let outputs;
+ try{outputs=await session.run({[session.inputNames[0]]:tensor});}finally{tensor.dispose();}
+ const out=outputs[session.outputNames[0]];
+ if(ticket===epoch){last={data:Float32Array.from(out.data),n:out.dims[2],geometry:g};lastTime=t;classify();$('status').textContent=`${fmt(t)} の映像を解析`;$('performance').textContent=`1回の解析 ${(performance.now()-begin).toFixed(0)} ms · 人数は推定値`;}
+ for(const output of Object.values(outputs))output.dispose();
+ }catch(e){console.error(e);active=false;video.pause();$('state').textContent='解析を停止しました';$('message').textContent='解析できませんでした。もう一度お試しください。';$('cover').hidden=false;$('start').disabled=false;$('start').textContent='もう一度試す';$('status').textContent='解析エラー';$('count').textContent='—';last=null;canvas.style.visibility='hidden';session=null;
+ }finally{busy=false;}
+}
+async function start(){if(starting)return;starting=true;$('start').disabled=true;$('message').textContent='YOLOを読み込み中… 初回は少し時間がかかります。';
+ try{await video.play();
+ if(!session){if(!globalThis.ort)throw new Error('Runtime unavailable');ort.env.wasm.wasmPaths=new URL('.',location.href).href;ort.env.wasm.numThreads=1;session=await ort.InferenceSession.create('person-model.onnx',{executionProviders:['wasm'],graphOptimizationLevel:'all'});}
+ active=true;dirty=true;$('cover').hidden=true;for(const id of ['play','restart','seek'])$(id).disabled=false;ui();await infer();
+ }catch(e){console.error(e);video.pause();$('message').textContent='読み込みに失敗しました。通信を確認して再試行してください。';$('start').disabled=false;$('start').textContent='もう一度試す';$('state').textContent='読み込みエラー';}
+ finally{starting=false;}
+}
+$('start').onclick=start;
+$('play').onclick=async()=>{if(video.paused){try{await video.play();dirty=true;}catch{$('status').textContent='再生できませんでした。もう一度再生を押してください。';}}else{video.pause();invalidate();}ui();};
+$('restart').onclick=()=>{invalidate();video.currentTime=0;position();};
+$('seek').oninput=()=>{invalidate();video.currentTime=Number($('seek').value);position();};
+$('confidence').oninput=()=>{$('confidenceValue').textContent=`${$('confidence').value}%`;if(busy){invalidate();}else classify();};
+$('boxes').onchange=()=>{if(!busy)draw();else dirty=true;};
+video.addEventListener('loadedmetadata',()=>{$('seek').max=video.duration;video.currentTime=Math.min(15,video.duration/3);position();});
+video.addEventListener('loadeddata',()=>{if(!active&&!starting){$('start').disabled=false;$('message').textContent='人物の動きをYOLOで見てみよう';$('state').textContent='再生待ち';}});
+video.addEventListener('error',()=>{active=false;$('cover').hidden=false;$('message').textContent='映像を読み込めませんでした。再読み込みしてください。';$('start').disabled=true;$('status').textContent='映像の読み込みエラー';});
+video.addEventListener('seeking',invalidate);video.addEventListener('seeked',()=>{dirty=true;position();});
+video.addEventListener('timeupdate',position);video.addEventListener('play',ui);video.addEventListener('pause',ui);
+video.addEventListener('ended',()=>{invalidate();video.currentTime=0;video.play().catch(()=>{$('status').textContent='続けるには再生を押してください。';});});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){video.pause();invalidate();}else{dirty=true;ui();}});
+setInterval(infer,100);
+
+if(video.readyState>=2){video.currentTime=Math.min(15,video.duration/3);$('start').disabled=false;$('message').textContent='人物の動きをYOLOで見てみよう';$('state').textContent='再生待ち';$('seek').max=video.duration;position();}

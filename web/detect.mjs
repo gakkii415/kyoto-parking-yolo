@@ -1,4 +1,11 @@
-export function inside(x,y,poly){let yes=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const [xi,yi]=poly[i],[xj,yj]=poly[j];if(((yi>y)!=(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))yes=!yes;}return yes;}
-export function similarity(a,b){const w=Math.max(0,Math.min(a.x+a.w/2,b.x+b.w/2)-Math.max(a.x-a.w/2,b.x-b.w/2)),h=Math.max(0,Math.min(a.y+a.h/2,b.y+b.h/2)-Math.max(a.y-a.h/2,b.y-b.h/2));return w*h/(a.w*a.h+b.w*b.h-w*h+1e-7);}
-export function decode(data,n=8400,scale=1,padX=0,padY=0){let candidates=[];for(let i=0;i<n;i++){let cls=0,score=0;for(let c=0;c<11;c++){const v=data[(4+c)*n+i];if(v>score){score=v;cls=c;}}if((![3,4,5,8].includes(cls))||score<.05)continue;const b={x:(data[i]-padX)/scale,y:(data[n+i]-padY)/scale,w:data[2*n+i]/scale,h:data[3*n+i]/scale,angle:0,score,cls};if([b.x,b.y,b.w,b.h,b.angle,b.score].every(Number.isFinite)&&b.w>0&&b.h>0)candidates.push(b);}candidates.sort((a,b)=>b.score-a.score);const keep=[];for(const b of candidates.slice(0,2000)){if(!keep.some(a=>similarity(a,b)>.5))keep.push(b);if(keep.length>=300)break;}return keep;}
-export function corners(b){let c=Math.cos(b.angle),s=Math.sin(b.angle);return [[-1,-1],[1,-1],[1,1],[-1,1]].map(([x,y])=>[b.x+x*b.w/2*c-y*b.h/2*s,b.y+x*b.w/2*s+y*b.h/2*c]);}
+export function iou(a,b){const w=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x)),h=Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));return w*h/(a.w*a.h+b.w*b.h-w*h||1)}
+// YOLO11 COCO, [1,84,8400], class 0 = person. Coordinates are top-left pixels.
+export function decode(data,n=8400,scale=1,padX=0,padY=0,threshold=.35){
+ const candidates=[];
+ for(let i=0;i<n;i++){const score=data[4*n+i];if(!Number.isFinite(score)||score<threshold)continue;
+ const w=data[2*n+i]/scale,h=data[3*n+i]/scale;if(w<=0||h<=0)continue;
+ candidates.push({x:(data[i]-padX)/scale-w/2,y:(data[n+i]-padY)/scale-h/2,w,h,score});}
+ candidates.sort((a,b)=>b.score-a.score);const kept=[];
+ for(const box of candidates.slice(0,1000)){if(kept.every(b=>iou(box,b)<.45))kept.push(box);if(kept.length>=100)break;}return kept;
+}
+export function letterbox(w,h,size=640){const scale=Math.min(size/w,size/h);return{scale,width:Math.round(w*scale),height:Math.round(h*scale),padX:Math.floor((size-Math.round(w*scale))/2),padY:Math.floor((size-Math.round(h*scale))/2)}}

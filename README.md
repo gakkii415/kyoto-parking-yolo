@@ -1,26 +1,32 @@
-# 京都パーキング観測室
+# YOLO 人物検出モニター (v2)
 
-https://gakkii415.github.io/kyoto-parking-yolo/?v=1
+https://gakkii415.github.io/kyoto-parking-yolo/?v=2
 
-repository-creator経由で作成。スマホ向けのYOLO実験アプリ。
+repository-creator経由で作成した既存リポジトリを、ユーザーの要望に合わせて人物検出へ変更。
+固定カメラの公開録画を1本読み込み、ブラウザ内のYOLO11nで人物を検出します。
 
-- YOLO11s-VisDrone（VisDroneのcar / van / truck / bus）を実際にブラウザ内で実行。
-- 画像取り込み、ポリゴン範囲指定、信頼度閾値、検出枠、拡大、端末内の観測履歴とCSV。
-- サンプルは京都・岩倉付近の国土地理院航空写真。衛星写真ではありません。撮影日不明。衛星写真もJPEG/PNG/WebPで取り込めます。
-- 静止画内の車両数の推定。駐車中か走行中かは判別しません。リアルタイム衛星画像取得・定期巡回・クラウド保存はありません。
+- 手動アップロード不要。開始ボタンで録画と推論を開始。
+- 人物の枠・信頼度・そのコマの人数。一時停止・再生位置・最初から・判定閾値。
+- 人物枠を同じ解析コマに重ねるため、表示更新は推論速度に依存します。
+- 録画のループ再生です。ライブ監視・京都の映像・累計来客数・バックグラウンド記録ではありません。
 
-## 再現と公開
+## Build and validation
 
-`.github/workflows/publish.yml` がCPU版PyTorchとUltralyticsを使用し、VisDrone学習済み重みをONNXへ変換。GSI実画像を取得し、ONNX推論とブラウザ共通のデコーダーで実データ検証後にGitHub Pagesへ公開。モデル・WASM・JSは同じPagesから配信。画像アップロードはサーバー送信されません。
+GitHub ActionsでUltralytics 8.3.160 / torch 2.5.1 CPUを用いてYOLO11nを640px ONNXへ出力。
+`python scripts/build.py`が動画、モデル、ONNX Runtime Web 1.20.1を同じPages配信元に配置。
+`node scripts/verify.mjs`が複数の実映像コマの検出結果を参照実装と比較し、出荷するWeb WASMでも推論します。
+ビルド検証の結果は `verification.json`。毎回のブラウザ推論で計算し、検出結果の事前書き込みはしません。
 
-ビルド: `python scripts/build.py` → `node scripts/verify.mjs`。アプリ本体はweb/。ONNX入力 [1,3,640,640]、RGB/255、114のレターボックス。出力 [1,15,8400]。VisDrone class 3/4/5/8、axis-aligned IoU 0.5でNMS。公開verification.jsonはサンプル推論の機械検証結果であり目視正解ラベルではありません。
+## Sources / licenses
 
-小さな車や影・樹木の遮蔽には誤検出/見逃しがあります。精度未評価。範囲の中心点判定、同一地点・同一範囲・同一閾値で比較してください。履歴はブラウザのlocalStorage最大100件。
+- Video: Intel, [sample-videos](https://github.com/intel-iot-devkit/sample-videos), commit `57978890822836f2b4743852f04f62fc511757e4`, CC BY 4.0. 動画は元ファイルを使用し、表示時に枠を追加。
+- YOLO11n: Ultralytics / AGPL-3.0. This app is AGPL-3.0.
+- ONNX Runtime Web: Microsoft / MIT.
 
-## 出典・ライセンス
+## Scope and review
 
-- 画像: [国土地理院タイル](https://maps.gsi.go.jp/development/ichiran.html)。元画像URLと取得時刻はsample.json。撮影日とHTTP更新日時を混同しない。
-- [Ultralytics YOLO](https://github.com/ultralytics/ultralytics): AGPL-3.0。本アプリもAGPL-3.0。
-- [ONNX Runtime](https://github.com/microsoft/onnxruntime): MIT。
+映像・検出・人数が同じ場所で分かる構成を採用。説明・ライセンスは折りたたみ。
+複数カメラ、ライブ配信、履歴は今回の「まず一つの動画で試す」範囲外。
+ブラウザでの画面検証は今回未実施。既存 `browser-smoke.mjs` はv1駐車場専用の過去検証で、v2の検証結果ではありません。
 
-学習済みモデル: [dronefreak/visdrone-yolov11s](https://huggingface.co/dronefreak/visdrone-yolov11s)、revision 853d168、AGPL-3.0。元の学習済みモデルからONNXに変換。京都の画像を追加学習したモデルではありません。
+確認済み: 店舗映像15秒・25秒・35秒の推論は2人・2人・5人で参照YOLOと一致。出荷するWeb WASMも15秒で2人。スタブによるアプリイベント試験で、開始・閾値・シーク中の古い推論破棄・停止・先頭復帰を確認（ブラウザ試験ではない）。全体再評価では、旧車両モデルのキャッシュ混入防止と、先読み済み動画でも人物のいる場面から始まる修正を採用。複数映像・履歴などの追加は今回見送り。コードと状態の再評価で追加採用0件。実画面デザインレビューは未実施のため完了とは扱わない。
