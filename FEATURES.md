@@ -55,5 +55,5 @@
 - Important flows / states / data decisions:
 - Durable feature decisions:
 
-### Kyoto parking specification
-コア: 実画像→端末内YOLO11s-VisDrone→範囲内の台数・枠→端末内履歴。ポリゴン、信頼度、拡大、画像入力、CSVを統合。衛星定期取得は画像契約と更新頻度が必要なので保留。クラウド同期・通知は試作の範囲外。入力画像は最長辺2048pxまで縮小し、推論入力は640px。履歴は同じ地点・範囲・閾値で比較。
+### Camera person detection
+ユーザーが衛星写真から固定カメラ1本の人物検出へ変更。YOLO11n COCO personを端末内で推論。録画を読み込み、開始・停止・シーク・枠表示・閾値を提供。映像と枠は同じコマへ同期。累計人数やライブ監視は今回対象外。
