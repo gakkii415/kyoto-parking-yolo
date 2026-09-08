@@ -27,7 +27,7 @@ async function infer(){if(!session||busy||!active||video.readyState<2||video.see
 }
 async function start(){if(starting)return;starting=true;$('start').disabled=true;$('message').textContent='YOLOを読み込み中… 初回は少し時間がかかります。';
  try{await video.play();
- if(!session){if(!globalThis.ort)throw new Error('Runtime unavailable');ort.env.wasm.wasmPaths=new URL('.',location.href).href;ort.env.wasm.numThreads=1;session=await ort.InferenceSession.create('model.onnx',{executionProviders:['wasm'],graphOptimizationLevel:'all'});}
+ if(!session){if(!globalThis.ort)throw new Error('Runtime unavailable');ort.env.wasm.wasmPaths=new URL('.',location.href).href;ort.env.wasm.numThreads=1;session=await ort.InferenceSession.create('person-model.onnx',{executionProviders:['wasm'],graphOptimizationLevel:'all'});}
  active=true;dirty=true;$('cover').hidden=true;for(const id of ['play','restart','seek'])$(id).disabled=false;ui();await infer();
  }catch(e){console.error(e);video.pause();$('message').textContent='読み込みに失敗しました。通信を確認して再試行してください。';$('start').disabled=false;$('start').textContent='もう一度試す';$('state').textContent='読み込みエラー';}
  finally{starting=false;}
@@ -47,4 +47,4 @@ video.addEventListener('ended',()=>{invalidate();video.currentTime=0;video.play(
 document.addEventListener('visibilitychange',()=>{if(document.hidden){video.pause();invalidate();}else{dirty=true;ui();}});
 setInterval(infer,100);
 
-if(video.readyState>=2){$('start').disabled=false;$('message').textContent='人物の動きをYOLOで見てみよう';$('state').textContent='再生待ち';$('seek').max=video.duration;position();}
+if(video.readyState>=2){video.currentTime=Math.min(15,video.duration/3);$('start').disabled=false;$('message').textContent='人物の動きをYOLOで見てみよう';$('state').textContent='再生待ち';$('seek').max=video.duration;position();}

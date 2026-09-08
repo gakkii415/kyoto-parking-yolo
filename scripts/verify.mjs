@@ -13,7 +13,7 @@ for(let i=0;i<meta.checks.length;i++){
 }
 // Run the shipped Web WASM runtime and model, not just Python inference.
 ort.env.wasm.numThreads=1;
-const s=await ort.InferenceSession.create(fs.readFileSync('dist/model.onnx'),{executionProviders:['wasm']});
+const s=await ort.InferenceSession.create(fs.readFileSync('dist/person-model.onnx'),{executionProviders:['wasm']});
 const b=fs.readFileSync('dist/input.bin'),input=new Float32Array(b.buffer,b.byteOffset,b.byteLength/4);
 const outputs=await s.run({[s.inputNames[0]]:new ort.Tensor('float32',input,[1,3,640,640])});
 const m=meta.checks[0],wasm=decode(outputs[s.outputNames[0]].data,8400,m.scale,m.padX,m.padY,.35);

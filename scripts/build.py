@@ -14,8 +14,8 @@ urllib.request.urlretrieve(source+'LICENSE',out/'VIDEO-LICENSE.txt')
 model=YOLO('yolo11n.pt')
 assert model.names[0]=='person'
 path=model.export(format='onnx',imgsz=640,opset=17,simplify=False,nms=False,dynamic=False)
-shutil.copy(path,out/'model.onnx');shutil.copy('LICENSE',out/'LICENSE')
-session=ort.InferenceSession(str(out/'model.onnx'),providers=['CPUExecutionProvider'])
+shutil.copy(path,out/'person-model.onnx');shutil.copy('LICENSE',out/'LICENSE')
+session=ort.InferenceSession(str(out/'person-model.onnx'),providers=['CPUExecutionProvider'])
 video=cv2.VideoCapture(str(out/'camera.mp4'))
 fps=video.get(cv2.CAP_PROP_FPS);duration=video.get(cv2.CAP_PROP_FRAME_COUNT)/fps
 assert duration>10
