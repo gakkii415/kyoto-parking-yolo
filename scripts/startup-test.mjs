@@ -5,7 +5,7 @@ class Element extends EventTarget { constructor(){super();this.style={};this.val
 const els=new Map();const el=id=>{if(!els.has(id))els.set(id,new Element());return els.get(id)};
 const v=el('video');Object.assign(v,{readyState:0,videoWidth:720,videoHeight:404,duration:65,currentTime:15,paused:true,seeking:false});
 v.play=async()=>{v.readyState=2;v.paused=false;v.dispatchEvent(new Event('play'))};v.pause=()=>{v.paused=true;v.dispatchEvent(new Event('pause'))};
-globalThis.document=Object.assign(new EventTarget(),{hidden:false,getElementById:el,createElement:()=>new Element()});
+globalThis.document=Object.assign(new EventTarget(),{hidden:false,getElementById:el,createElement:()=>new Element(),querySelectorAll:()=>[]});
 globalThis.location={href:'https://example.test/camera/'};let tick;globalThis.setInterval=f=>{tick=f};
 let pending=null;function output(){const data=new Float32Array(84*8400);data[0]=320;data[8400]=320;data[2*8400]=80;data[3*8400]=180;data[4*8400]=.8;return{output:{data,dims:[1,84,8400],dispose(){}}}}
 globalThis.ort={env:{wasm:{}},Tensor:class{dispose(){}},InferenceSession:{create:async()=>({inputNames:['input'],outputNames:['output'],run:async()=>pending?await pending:output()})}};
