@@ -29,4 +29,23 @@ export function mask(b,data,n,proto,g,size=160){
  for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){const p=y*size+x;let sum=0;for(let k=0;k<32;k++)sum+=coeff[k]*proto[k*size*size+p];if(sum>0)result[p]=1;}return result;
 }
 export function inArea(b,w,h){return b.x+b.w/2>=w*.25&&b.x+b.w/2<=w*.75&&b.y+b.h/2>=h*.2&&b.y+b.h/2<=h*.8;}
-export function track(boxes,previous,nextId){const used=new Set();const tracks=boxes.map(b=>{let best=null,score=.15;for(const p of previous){const s=iou(b,p);if(!used.has(p.id)&&p.cls===b.cls&&s>score){best=p;score=s;}}const id=best?best.id:nextId++;used.add(id);return {...b,id,trail:[...(best?.trail||[]),[b.x+b.w/2,b.y+b.h/2]].slice(-24)};});return{tracks,nextId};}
+// Keep unmatched tracks for three VIDEO seconds. Never count them as detections.
+export function track(boxes,previous,nextId,time=(Math.max(-.1,...previous.map(p=>p.lastSeen??0))+.1)){
+ const alive=previous.filter(p=>time>=(p.lastSeen??time)&&time-(p.lastSeen??time)<=3),pairs=[];
+ for(let i=0;i<boxes.length;i++)for(let j=0;j<alive.length;j++){
+ const b=boxes[i],p=alive[j];if(p.cls!==b.cls)continue;
+ const dt=Math.min(1,Math.max(0,time-p.lastSeen)),pred={...p,x:p.x+(p.vx||0)*dt,y:p.y+(p.vy||0)*dt};
+ const overlap=Math.max(iou(b,p),iou(b,pred)),distance=Math.hypot(b.x+b.w/2-pred.x-pred.w/2,b.y+b.h/2-pred.y-pred.h/2)/Math.max(20,Math.hypot(p.w,p.h));
+ const ratio=b.w*b.h/(p.w*p.h);if(ratio<.3||ratio>3)continue;
+ if(overlap>.1||distance<.65)pairs.push({i,j,score:overlap+Math.max(0,1-distance)*.4});
+ }
+ pairs.sort((a,b)=>b.score-a.score);const matches=new Map(),used=new Set();
+ for(const pair of pairs)if(!matches.has(pair.i)&&!used.has(pair.j)){matches.set(pair.i,pair.j);used.add(pair.j);}
+ const tracks=boxes.map((b,i)=>{const p=matches.has(i)?alive[matches.get(i)]:null,dt=p?time-p.lastSeen:0;
+ const point=[b.x+b.w/2,b.y+b.h/2],trail=p?[...p.trail]:[];
+ if(!p||dt>0)trail.push(point);
+ return {...b,id:p?p.id:nextId++,trail:trail.slice(-240),lastSeen:time,visible:true,vx:p&&dt>0?(b.x-p.x)/dt:(p?.vx||0),vy:p&&dt>0?(b.y-p.y)/dt:(p?.vy||0)};
+ });
+ for(let j=0;j<alive.length;j++)if(!used.has(j))tracks.push({...alive[j],visible:false});
+ return {tracks,nextId};
+}

@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';import {track} from '../web/detect.mjs';
+const box=(x=10,cls=0)=>({x,y:10,w:20,h:30,cls});
+let a=track([box()],[],1,0),b=track([box(12)],a.tracks,a.nextId,.2);
+const id=a.tracks[0].id;
+let lost=track([],b.tracks,b.nextId,1);assert.equal(lost.tracks[0].id,id);assert.equal(lost.tracks[0].visible,false);assert.equal(lost.tracks[0].trail.length,2);
+let back=track([box(22)],lost.tracks,lost.nextId,1.5);assert.equal(back.tracks[0].id,id);assert.equal(back.tracks[0].trail.length,3);assert(back.tracks[0].visible);
+let paused=track([box(22)],back.tracks,back.nextId,1.5);assert.equal(paused.tracks[0].trail.length,3);
+let expired=track([],back.tracks,back.nextId,4.6);assert.equal(expired.tracks.length,0);assert.notEqual(track([box(22)],expired.tracks,expired.nextId,5).tracks[0].id,id);
+let far=track([box(400)],back.tracks,back.nextId,2);assert.notEqual(far.tracks.find(t=>t.visible).id,id);
+let different=track([box(22,2)],back.tracks,back.nextId,2);assert.notEqual(different.tracks.find(t=>t.visible).id,id);
+let two=track([box(23),box(24)],back.tracks,back.nextId,2);assert.equal(new Set(two.tracks.filter(t=>t.visible).map(t=>t.id)).size,2);
+console.log('PASS: dropout retention, reconnect, pause, expiry, distance/class gates, unique assignment');

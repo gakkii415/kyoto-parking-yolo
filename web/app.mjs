@@ -1,24 +1,25 @@
-import {objects,letterbox,labels,bones,mask,track,inArea} from './detect.mjs?v=4';
+import {objects,letterbox,labels,bones,mask,track,inArea} from './detect.mjs?v=5';
 const $=id=>document.getElementById(id),video=$('video'),canvas=$('canvas'),ctx=canvas.getContext('2d');
 const frame=document.createElement('canvas'),fc=frame.getContext('2d'),input=document.createElement('canvas');input.width=input.height=640;
 const ic=input.getContext('2d',{willReadFrequently:true});
 const scenes={store:['店舗の固定カメラ','camera.mp4','poster.jpg','store-aisle-detection.mp4'],road:['道路の車','road.mp4','road.jpg','car-detection.mp4'],street:['人・自転車・車','street.mp4','street.jpg','person-bicycle-car-detection.mp4']};
-const hints={detect:'人・車・自転車・食器など、対象に名前と枠を表示します。',segment:'対象の形に沿って色を塗ります。輪郭専用のYOLOを使います。',pose:'人の肩・肘・膝などを点と線で表示します。骨格は人専用です。',track:'同じ対象を仮番号で追い、移動の軌跡を表示します。隠れると番号が変わる場合があります。',area:'中央の枠のエリアに、対象の中心が入ると強調します。数字はエリア内の対象数です。'};
+const hints={detect:'人・車・自転車・食器など、対象に名前と枠を表示します。',segment:'対象の形に沿って色を塗ります。輪郭専用のYOLOを使います。',pose:'人の肩・肘・膝などを点と線で表示します。骨格は人専用です。',track:'同じ対象を仮番号で追い、移動の軌跡を表示します。見失っても映像時間で3秒間は跡を残し、近くで再検出するとつなぎます。',area:'中央の枠のエリアに、対象の中心が入ると強調します。数字はエリア内の対象数です。'};
 let mode='detect',sessionKind='',tracks=[],nextId=1,sceneFresh=true;
 const sceneInfo=fetch('sample.json').then(r=>r.json()).catch(()=>null);
 const kind=()=>mode==='segment'?'segment':mode==='pose'?'pose':'detect';
 let session=null,starting=false,active=false,busy=false,dirty=true,epoch=0,last=null,lastTime=-1,boxList=[];
 const fmt=t=>`${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,'0')}`;
 function position(){const t=Number.isFinite(video.currentTime)?video.currentTime:0,d=video.duration;$('time').textContent=`${fmt(t)} / ${Number.isFinite(d)?fmt(d):'—'}`;$('seek').value=t;}
-function invalidate(){tracks=[];nextId=1;epoch++;dirty=true;last=null;$('count').textContent='—';canvas.style.visibility='hidden';}
+function invalidate(resetTracks=true){if(resetTracks){tracks=[];nextId=1;}epoch++;dirty=true;last=null;$('count').textContent='—';canvas.style.visibility='hidden';}
 const colors=['#d4c7ff','#421d24','#ffffff','#bda6da','#91767c'];
 function draw(){if(!last)return;ctx.drawImage(frame,0,0);const w=canvas.width,h=canvas.height;
  if($('boxes').checked){
+ if(mode==='track'){for(const lost of tracks.filter(t=>!t.visible)){ctx.strokeStyle=colors[(lost.id-1)%colors.length];ctx.globalAlpha=.3;ctx.lineWidth=Math.max(2,w/300);ctx.beginPath();lost.trail.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.stroke();ctx.globalAlpha=1;}}
  if(mode==='area'){ctx.strokeStyle='#421d24';ctx.lineWidth=3;ctx.strokeRect(w*.25,h*.2,w*.5,h*.6);}
  if(mode==='segment'&&last.proto){const layer=document.createElement('canvas');layer.width=layer.height=160;const lc=layer.getContext('2d'),pixels=lc.createImageData(160,160);
  for(let j=0;j<boxList.length;j++){const values=mask(boxList[j],last.data,last.n,last.proto,last.geometry);const hex=colors[j%colors.length];for(let i=0;i<values.length;i++)if(values[i]){pixels.data[i*4]=parseInt(hex.slice(1,3),16);pixels.data[i*4+1]=parseInt(hex.slice(3,5),16);pixels.data[i*4+2]=parseInt(hex.slice(5,7),16);pixels.data[i*4+3]=140;}}
  lc.putImageData(pixels,0,0);const g=last.geometry;ctx.drawImage(layer,g.padX/4,g.padY/4,g.width/4,g.height/4,0,0,w,h);}
- for(let j=0;j<boxList.length;j++){const b=boxList[j],color=colors[j%colors.length];ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=Math.max(2,w/300);
+ for(let j=0;j<boxList.length;j++){const b=boxList[j],color=colors[(mode==='track'?b.id-1:j)%colors.length];ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=Math.max(2,w/300);
  if(mode==='pose'){for(const [a,z] of bones){const p=b.points[a],q=b.points[z];if(p[2]<.4||q[2]<.4)continue;ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();}for(const p of b.points){if(p[2]<.4)continue;ctx.beginPath();ctx.arc(p[0],p[1],Math.max(3,w/180),0,Math.PI*2);ctx.fill();}}
  else if(mode==='track'){ctx.beginPath();b.trail.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.stroke();ctx.beginPath();ctx.arc(b.x+b.w/2,b.y+b.h/2,5,0,Math.PI*2);ctx.fill();}
  else if(mode!=='segment'){ctx.globalAlpha=mode==='area'&&!inArea(b,w,h)?.3:1;ctx.strokeRect(b.x,b.y,b.w,b.h);ctx.globalAlpha=1;}
@@ -26,7 +27,7 @@ function draw(){if(!last)return;ctx.drawImage(frame,0,0);const w=canvas.width,h=
  }}
  canvas.style.visibility='visible';const counted=mode==='area'?boxList.filter(b=>inArea(b,w,h)):boxList;$('count').textContent=counted.length;const totals={};for(const b of counted)totals[labels[b.cls]]=(totals[labels[b.cls]]||0)+1;$('breakdown').textContent=Object.entries(totals).map(([label,n])=>`${label} ${n}`).join(' ／ ')||'この場面では対象を検出していません。';
 }
-function classify(){if(!last)return;boxList=objects(last.data,last.n,last.geometry,Number($('confidence').value)/100,kind(),mode==='pose'?'person':$('filter').value);if(mode==='track'){const result=track(boxList,tracks,nextId);tracks=result.tracks;nextId=result.nextId;boxList=tracks;}draw();}
+function classify(){if(!last)return;boxList=objects(last.data,last.n,last.geometry,Number($('confidence').value)/100,kind(),mode==='pose'?'person':$('filter').value);if(mode==='track'){const result=track(boxList,tracks,nextId,last.time);tracks=result.tracks;nextId=result.nextId;boxList=tracks.filter(t=>t.visible);}draw();}
 function ui(){const paused=video.paused;$('play').textContent=paused?'再生':'一時停止';$('play').setAttribute('aria-label',paused?'再生':'一時停止');if(active)$('state').textContent=paused?'一時停止':'検出中';}
 async function infer(){if(!session||busy||!active||video.readyState<2||video.seeking||document.hidden)return;
  if(!dirty&&(video.paused||Math.abs(video.currentTime-lastTime)<.08))return;
@@ -37,7 +38,7 @@ async function infer(){if(!session||busy||!active||video.readyState<2||video.see
  const tensor=new ort.Tensor('float32',a,[1,3,640,640]);let outputs;
  try{outputs=await session.run({[session.inputNames[0]]:tensor});}finally{tensor.dispose();}
  const out=outputs[session.outputNames[0]];
- if(ticket===epoch){last={data:Float32Array.from(out.data),n:out.dims[2],geometry:g,proto:session.outputNames.length>1?Float32Array.from(outputs[session.outputNames[1]].data):null};lastTime=t;classify();$('status').textContent=`${fmt(t)} の映像を解析`;$('performance').textContent=`1回の解析 ${(performance.now()-begin).toFixed(0)} ms · 検出結果は推定値`;}
+ if(ticket===epoch){last={data:Float32Array.from(out.data),n:out.dims[2],geometry:g,time:t,proto:session.outputNames.length>1?Float32Array.from(outputs[session.outputNames[1]].data):null};lastTime=t;classify();$('status').textContent=`${fmt(t)} の映像を解析`;$('performance').textContent=`1回の解析 ${(performance.now()-begin).toFixed(0)} ms · 検出結果は推定値`;}
  for(const output of Object.values(outputs))output.dispose();
  }catch(e){console.error(e);active=false;video.pause();$('state').textContent='解析を停止しました';$('message').textContent='解析できませんでした。もう一度お試しください。';$('cover').hidden=false;$('start').disabled=false;$('start').textContent='もう一度試す';$('status').textContent='解析エラー';$('count').textContent='—';last=null;canvas.style.visibility='hidden';session=null;
  }finally{busy=false;}
@@ -73,10 +74,10 @@ for(const button of document.querySelectorAll('[data-mode]'))button.onclick=()=>
 $('scene').onchange=()=>{sceneFresh=true;prepare();const scene=scenes[$('scene').value];video.src=scene[1];video.poster=scene[2];video.setAttribute('aria-label',scene[0]+'の録画');video.load();$('sceneTitle').textContent=scene[0];$('sourceLink').href='https://github.com/intel-iot-devkit/sample-videos/blob/master/'+scene[3];$('sourceLink').textContent='Intel / '+scene[3];};
 $('filter').onchange=()=>{if(busy)invalidate();else{tracks=[];classify();}};
 $('start').onclick=start;
-$('play').onclick=async()=>{if(video.paused){try{await video.play();dirty=true;}catch{$('status').textContent='再生できませんでした。もう一度再生を押してください。';}}else{video.pause();invalidate();}ui();};
+$('play').onclick=async()=>{if(video.paused){try{await video.play();dirty=true;}catch{$('status').textContent='再生できませんでした。もう一度再生を押してください。';}}else{video.pause();invalidate(false);}ui();};
 $('restart').onclick=()=>{invalidate();video.currentTime=0;position();};
 $('seek').oninput=()=>{invalidate();video.currentTime=Number($('seek').value);position();};
-$('confidence').oninput=()=>{$('confidenceValue').textContent=`${$('confidence').value}%`;if(busy){invalidate();}else classify();};
+$('confidence').oninput=()=>{$('confidenceValue').textContent=`${$('confidence').value}%`;if(busy){invalidate(false);}else classify();};
 $('boxes').onchange=()=>{if(!busy)draw();else dirty=true;};
 video.addEventListener('loadedmetadata',()=>{$('seek').max=video.duration;position();});
 video.addEventListener('loadeddata',()=>{if(!active&&!starting){$('start').disabled=false;$('message').textContent='映像をYOLOで見てみよう';$('state').textContent='再生待ち';}});
@@ -84,7 +85,7 @@ video.addEventListener('error',()=>{active=false;$('cover').hidden=false;$('mess
 video.addEventListener('seeking',invalidate);video.addEventListener('seeked',()=>{dirty=true;position();});
 video.addEventListener('timeupdate',position);video.addEventListener('play',ui);video.addEventListener('pause',ui);
 video.addEventListener('ended',()=>{invalidate();video.currentTime=0;video.play().catch(()=>{$('status').textContent='続けるには再生を押してください。';});});
-document.addEventListener('visibilitychange',()=>{if(document.hidden){video.pause();invalidate();}else{dirty=true;ui();}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){video.pause();invalidate(false);}else{dirty=true;ui();}});
 setInterval(infer,100);
 
 // Readiness is not a prerequisite for a user-initiated play request.
