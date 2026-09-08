@@ -12,7 +12,7 @@ for key,name,t in [('store','store-aisle-detection',35),('road','car-detection',
  urllib.request.urlretrieve(source+name+'.mp4',out/(target+'.mp4'))
  video=cv2.VideoCapture(str(out/(target+'.mp4')));duration=video.get(cv2.CAP_PROP_FRAME_COUNT)/video.get(cv2.CAP_PROP_FPS);assert duration>1
  found=False
- for chosen in [min(t,duration/2),duration*.2,duration*.4,duration*.6,duration*.8]:
+ for chosen in [min(t,duration/2)]+list(np.arange(.5,duration,.5)):
   video.set(cv2.CAP_PROP_POS_MSEC,chosen*1000);ok,frame=video.read()
   if not ok:continue
   result=detector.predict(frame,imgsz=640,conf=.35,rect=False,verbose=False)[0]
