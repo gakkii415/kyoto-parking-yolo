@@ -1,4 +1,4 @@
-import {decode,letterbox} from './detect.mjs?v=2';
+import {decode,letterbox} from './detect.mjs?v=3';
 const $=id=>document.getElementById(id),video=$('video'),canvas=$('canvas'),ctx=canvas.getContext('2d');
 const frame=document.createElement('canvas'),fc=frame.getContext('2d'),input=document.createElement('canvas');input.width=input.height=640;
 const ic=input.getContext('2d',{willReadFrequently:true});
@@ -25,11 +25,26 @@ async function infer(){if(!session||busy||!active||video.readyState<2||video.see
  }catch(e){console.error(e);active=false;video.pause();$('state').textContent='解析を停止しました';$('message').textContent='解析できませんでした。もう一度お試しください。';$('cover').hidden=false;$('start').disabled=false;$('start').textContent='もう一度試す';$('status').textContent='解析エラー';$('count').textContent='—';last=null;canvas.style.visibility='hidden';session=null;
  }finally{busy=false;}
 }
-async function start(){if(starting)return;starting=true;$('start').disabled=true;$('message').textContent='YOLOを読み込み中… 初回は少し時間がかかります。';
- try{await video.play();
- if(!session){if(!globalThis.ort)throw new Error('Runtime unavailable');ort.env.wasm.wasmPaths=new URL('.',location.href).href;ort.env.wasm.numThreads=1;session=await ort.InferenceSession.create('person-model.onnx',{executionProviders:['wasm'],graphOptimizationLevel:'all'});}
+function timeout(promise,ms,label){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(label)),ms);})]).finally(()=>clearTimeout(timer));}
+async function runtime(){
+ if(globalThis.ort)return;
+ const script=document.createElement('script');script.src='ort.min.js';
+ try{await timeout(new Promise((resolve,reject)=>{script.onload=resolve;script.onerror=()=>reject(new Error('runtime'));document.head.appendChild(script);}),30000,'runtime timeout');}finally{script.remove();}
+}
+async function start(){if(starting)return;starting=true;active=false;$('start').disabled=true;$('cover').hidden=false;$('message').textContent='映像を再生しています…';$('state').textContent='映像を読み込み中';
+ try{
+ // Call play directly in the tap handler. Do not wait for preload/loadeddata.
+ video.muted=true;video.playsInline=true;if(video.error)video.load();
+ await timeout(video.play(),20000,'video timeout');
+ $('message').textContent='YOLOを読み込み中… 初回は少し時間がかかります。';$('state').textContent='YOLOを準備中';
+ if(!session){await runtime();ort.env.wasm.wasmPaths=new URL('.',location.href).href;ort.env.wasm.numThreads=1;
+ const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),45000);
+ let bytes;try{const response=await fetch('person-model.onnx',{signal:controller.signal});if(!response.ok)throw new Error('model download');bytes=await response.arrayBuffer();}finally{clearTimeout(timer);}
+ const creation=ort.InferenceSession.create(bytes,{executionProviders:['wasm'],graphOptimizationLevel:'all'});
+ try{session=await timeout(creation,45000,'model timeout');}catch(e){creation.then(s=>s.release()).catch(()=>{});throw e;}
+ }
  active=true;dirty=true;$('cover').hidden=true;for(const id of ['play','restart','seek'])$(id).disabled=false;ui();await infer();
- }catch(e){console.error(e);video.pause();$('message').textContent='読み込みに失敗しました。通信を確認して再試行してください。';$('start').disabled=false;$('start').textContent='もう一度試す';$('state').textContent='読み込みエラー';}
+ }catch(e){console.error(e);active=false;video.pause();$('message').textContent='読み込みが完了しませんでした。ボタンを押して再試行できます。';$('start').disabled=false;$('start').textContent='もう一度試す';$('state').textContent='読み込みを再試行できます';$('status').textContent='読み込みを中断しました';}
  finally{starting=false;}
 }
 $('start').onclick=start;
@@ -38,13 +53,15 @@ $('restart').onclick=()=>{invalidate();video.currentTime=0;position();};
 $('seek').oninput=()=>{invalidate();video.currentTime=Number($('seek').value);position();};
 $('confidence').oninput=()=>{$('confidenceValue').textContent=`${$('confidence').value}%`;if(busy){invalidate();}else classify();};
 $('boxes').onchange=()=>{if(!busy)draw();else dirty=true;};
-video.addEventListener('loadedmetadata',()=>{$('seek').max=video.duration;video.currentTime=Math.min(15,video.duration/3);position();});
+video.addEventListener('loadedmetadata',()=>{$('seek').max=video.duration;position();});
 video.addEventListener('loadeddata',()=>{if(!active&&!starting){$('start').disabled=false;$('message').textContent='人物の動きをYOLOで見てみよう';$('state').textContent='再生待ち';}});
-video.addEventListener('error',()=>{active=false;$('cover').hidden=false;$('message').textContent='映像を読み込めませんでした。再読み込みしてください。';$('start').disabled=true;$('status').textContent='映像の読み込みエラー';});
+video.addEventListener('error',()=>{active=false;$('cover').hidden=false;$('message').textContent='映像を読み込めませんでした。再読み込みしてください。';$('start').disabled=false;$('start').textContent='もう一度試す';$('status').textContent='映像の読み込みエラー';});
 video.addEventListener('seeking',invalidate);video.addEventListener('seeked',()=>{dirty=true;position();});
 video.addEventListener('timeupdate',position);video.addEventListener('play',ui);video.addEventListener('pause',ui);
 video.addEventListener('ended',()=>{invalidate();video.currentTime=0;video.play().catch(()=>{$('status').textContent='続けるには再生を押してください。';});});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){video.pause();invalidate();}else{dirty=true;ui();}});
 setInterval(infer,100);
 
-if(video.readyState>=2){video.currentTime=Math.min(15,video.duration/3);$('start').disabled=false;$('message').textContent='人物の動きをYOLOで見てみよう';$('state').textContent='再生待ち';$('seek').max=video.duration;position();}
+// Readiness is not a prerequisite for a user-initiated play request.
+$('start').disabled=false;$('state').textContent='開始できます';
+if(Number.isFinite(video.duration)){$('seek').max=video.duration;position();}
