@@ -348,19 +348,38 @@ Yesの場合、装飾を追加する前に、構成、情報階層、コンテ�
 
 <!-- repository-creator:managed:end -->
 
-## Project Direction
+## Project Direction — Superhuman / golden hour editorial dashboard
 
-- Product / users / primary task:
-- Context of use / target devices:
-- Desired impression:
-- Information density / hierarchy:
-- Reference products / source URLs:
-- Selected reference dimensions / what to borrow:
-- What not to copy / avoid:
-- Structural direction:
-- Typography / color / spacing / shape direction:
-- Motion / responsive direction:
-- Durable design decisions:
+ユーザー指定（2026-09-08）。以前の暗色監視モニター方針を置き換える。指定本文内でCTA色に矛盾があるため、Components・Do/Don'tで繰り返されるMidnight Wineを主操作、Lilac Mistを副操作と選択タブに使う。
 
-### Camera monitor direction
-スマホでYOLOを試す初心者。映像中心と数値一覧中心を比較し、映像中心を採用。暗い中性色のモニター、検出と人数に黄緑を使う。見出し23px以下、数値48–58px、6px以内の角丸。スマホは再生位置を操作ボタン直下へ移動し、人数を映像の近くに置く。詳細説明は閉じた状態。環境のSites指示に従い、ブラウザ参照・画面QAは実施しない。
+### Colors
+| Token | Value | Role |
+|---|---|---|
+| Midnight Wine | #421d24 | 主操作・強調する枠 |
+| Royal Violet | #714cb6 | インラインリンクのみ |
+| Lilac Mist | #d4c7ff | 選択タブ・副操作 |
+| Warm Parchment | #f2f0eb | ページ背景 |
+| Soft Mist | #e3e3e2 | 細い境界 |
+| Ink Charcoal | #292827 | 文字 |
+| Stone Gray | #666666 | 補助文字 |
+| Paper White | #ffffff | 映像上の透過パネル・必要なカード |
+| Deep Lagoon | #0c4243 | 全幅特集帯専用。今回の実用画面では使用しない |
+
+### Typography
+Interを第一代替、端末サンセリフと日本語フォントへフォールバック。見出しはweight 460、本文460、強調540。スマホ見出し28px、PC36px、数値49–64px、本文16px、補助12–14px。28px以上は約-.022〜-.028emの詰め。数字はtabular-nums。太字700の大見出しは使わない。
+
+### Surfaces / spacing
+4px単位。max-width1200px。関連操作は8–24px、まとまりは32–64px。カード16px角丸、タブ8px、小ボタン8px、主ボタン16px。ドロップシャドウなし。白い画面全体・黒い文字・UI面のグラデーションは禁止。
+
+### Components and application
+- ヘッダー: 高さ64px、羊皮紙色の半透明＋blur12px、細い罫線。スマホ56px。
+- 主操作: #421d24に白、48px高、16px角丸。
+- 選択タブ: 5等分の白地、選択だけ#d4c7ff。映像・対象セレクトは直上。
+- 映像: 実際の解析対象を写真の役割に据える。素材映像を暖色加工せず、そのまま解析。
+- 開始案内: 映像に白85–90%の軽い透過カードを重ねる。影なし。スマホでも開始ボタンを映像内に置く。
+- 結果: 映像直下、静かな大きい数字と種類内訳。架空の指標カードは置かない。
+- 検出描画: ワイン・薄紫・白・同系の中間色。文字ラベルの明暗を背景色で変える。リンク以外にRoyal Violetを使わない。
+- 内容に必要のない広告ヒーロー、ロゴ6枚、特集帯、多列フッターは作らない。今回の中心は映像を選んでYOLOの違いを試すこと。
+
+### Reference and verification
+参照はユーザーが全文提示したSuperhuman仕様。暗色案と羊皮紙色の編集画面を比較し、ユーザー指定の後者を採用。ブラウザ参照・画面QAは環境のSites指示に従い未実施。機能検証は実映像・出荷モデルで実行し、画面検証と区別する。

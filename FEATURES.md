@@ -55,5 +55,5 @@
 - Important flows / states / data decisions:
 - Durable feature decisions:
 
-### Camera person detection
-ユーザーが衛星写真から固定カメラ1本の人物検出へ変更。YOLO11n COCO personを端末内で推論。録画を読み込み、開始・停止・シーク・枠表示・閾値を提供。映像と枠は同じコマへ同期。累計人数やライブ監視は今回対象外。
+### YOLO variants
+3公開録画×5表示。物体検出、実マスク、人17関節、IoU簡易追跡、中央固定エリア。人のみ／人以外／全対象。モード変更は解析を止めて明示的開始へ戻る。切替時に旧モデルを解放。追跡は本人識別ではなく、遮蔽でID変更あり。先読みなしの開始・再試行を維持。
